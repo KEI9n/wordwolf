@@ -1,0 +1,262 @@
+#WordWolf code (from UselessBot)
+#Code by KabanFriends
+
+discord command wordwolf [<text>] [<text>] [<text>]:
+	prefixes: {@BotPrefix}
+	bots: {@BotName}
+	trigger:
+		agiri_checkBotMode(event-member) is true
+		set {_id} to discord id of event-channel
+		delete event-message with event-bot
+		if agiri_checkCommandPermission("%used command%", event-user, event-guild, event-channel) is true:
+			if event-bot in event-guild has permission message manage in event-channel:
+				if {agiri.wordWolf::%discord id of event-channel%} is not set:
+					delete {agiri.wordWolf::%discord id of event-channel%::players::*}
+					delete {agiri.wordWolf::%discord id of event-channel%::*}
+					set {agiri.wordWolf::%discord id of event-channel%::guildID} to discord id of event-guild
+					set {agiri.wordWolf::%discord id of event-channel%::timerSince} to now
+					set {agiri.wordWolf::%discord id of event-channel%::timerLeft} to 2
+					if arg 2 is not set:
+						send a http request to "http://word-wolf.com/wordpairs"
+						map json the body of last http response to {_json::*}
+						set {_theme} to "%{_json::ww}%;%{_json::vw}%"
+						set {_themeSplit::*} to {_theme} split at ";" 
+						set {_firstSelect} to random object out of "innocent" or "wolf"
+						if {_firstSelect} is "innocent":
+							set {agiri.wordWolf::%discord id of event-channel%::innocentTheme} to "%{_themeSplit::1}%"
+							set {agiri.wordWolf::%discord id of event-channel%::wolfTheme} to "%{_themeSplit::2}%"
+						else:
+							set {agiri.wordWolf::%discord id of event-channel%::wolfTheme} to "%{_themeSplit::1}%"
+							set {agiri.wordWolf::%discord id of event-channel%::innocentTheme} to "%{_themeSplit::2}%"
+					else:
+						set {_firstSelect} to random object out of "innocent" or "wolf"
+						set {agiri.wordWolf::%discord id of event-channel%::%{_firstSelect}%Theme} to arg 2
+						if arg 3 is not set:
+							reply with ":no_entry_sign: %agiri_getIDText(""wordwolf-no-theme-b"", discord id of event-guild)%"
+							set {_hasError} to true
+						else:
+							if {_firstSelect} is "innocent":
+								set {agiri.wordWolf::%discord id of event-channel%::wolfTheme} to arg 3
+							else:
+								set {agiri.wordWolf::%discord id of event-channel%::innocentTheme} to arg 3
+					if arg 1 is not set:
+						set {agiri.wordWolf::%discord id of event-channel%::discussTime} to 3
+					else:
+						set {_time} to arg 1 parsed as an integer
+						if {_time} is not set:
+							reply with ":no_entry_sign: %agiri_getIDText(""wordwolf-no-time"", discord id of event-guild)%"
+							set {_hasError} to true
+						else if {_time} is not between 1 and 15:
+							reply with ":no_entry_sign: %agiri_getIDText(""wordwolf-invalid-time"", discord id of event-guild)%"
+							set {_hasError} to true
+						else:
+							set {agiri.wordWolf::%{_id}%::discussTime} to {_time}
+					if {_hasError} is not set:
+						create embed:
+							set the author info of the embed to author named "%agiri_getIDText(""wordwolf-embed-title"", discord id of event-guild)% (//%used command%)" with no url
+							add field named agiri_getIDText("wordwolf-embed-waiting-players-title", discord id of event-guild) with value agiri_getIDText("wordwolf-embed-waiting-players-description", discord id of event-guild) to embed
+							set the colour of the embed to {@BotColor}
+						reply with last created embed
+						reply with ":alarm_clock: %agiri_getIDText(""wordwolf-waiting-players-2minutes-left"", discord id of event-guild)%"
+						set {agiri.wordWolf::%discord id of event-channel%::gameStatus} to "waiting"
+						set {agiri.wordWolf::%discord id of event-channel%} to true
+				else:
+					delete {agiri.wordWolf::%{_id}%::playerIndex::*}
+					loop {agiri.wordWolf::%{_id}%::players::*}:
+						delete {agiri.wordWolf::%{_id}%::%loop-index%::voted::*}
+					delete {agiri.wordWolf::%{_id}%::votedPlayers::*}
+					delete {agiri.wordWolf::%{_id}%::players::*}
+					delete {agiri.wordWolf::%{_id}%::*}
+					delete {agiri.wordWolf::%{_id}%}
+					reply with ":arrow_right: %agiri_getIDText(""wordwolf-force-end"", discord id of event-guild)%"
+			else:
+				set {_temp} to agiri_getIDText("wordwolf-no-bot-permission", discord id of event-guild)
+				replace every "{botId}" with "%discord id of event-bot%" in {_temp}
+				reply with ":no_entry_sign: %{_temp}%"
+		else:
+			agiri_createPermissionError("%used command%", discord id of event-guild)
+			reply with last created embed
+			
+on guild message received seen by "{@BotName}":
+	agiri_checkBotMode(event-member) is true
+	set {_id} to discord id of event-channel
+	set {_uid} to discord id of event-member
+	"%discord id of event-member%" is not "%discord id of event-bot%"
+	bot state of event-user is false
+	if {agiri.wordWolf::%{_id}%} is set:
+		if {agiri.wordWolf::%{_id}%::gameStatus} is "waiting":
+			if {agiri.wordWolf::%{_id}%::players::%discord id of event-member%} is not set:
+				delete event-message with event-bot
+				set {agiri.wordWolf::%{_id}%::players::%discord id of event-member%} to discord id of event-member
+				set {_temp} to agiri_getIDText("wordwolf-waiting-players-joined", discord id of event-guild)
+				replace every "{joinId}" with "%discord id of event-member%" in {_temp}
+				replace every "{players}" with "%size of {agiri.wordWolf::%{_id}%::players::*}%" in {_temp}
+				reply with ":arrow_right: %{_temp}%"
+		else if {agiri.wordWolf::%{_id}%::gameStatus} is "revealTheme":
+			if {agiri.wordWolf::%{_id}%::players::%discord id of event-member%} is set:
+				delete event-message with event-bot
+		else if {agiri.wordWolf::%{_id}%::gameStatus} is "votePlayer":
+			if {agiri.wordWolf::%{_id}%::players::%discord id of event-member%} is set:
+				delete event-message with event-bot
+				set {_number} to event-string parsed as an integer
+				if {_number} is between 1 and size of {agiri.wordWolf::%{_id}%::players::*}:
+					if {agiri.wordwolf::%{_id}%::votedUser::%{_uid}%} is set:
+						delete {agiri.wordWolf::%{_id}%::%{agiri.wordwolf::%{_id}%::votedUser::%{_uid}%}%::voted::%{_uid}%}
+					set {agiri.wordWolf::%{_id}%::votedPlayers::%{_uid}%} to true
+					set {agiri.wordwolf::%{_id}%::votedUser::%{_uid}%} to {agiri.wordWolf::%{_id}%::playerIndex::%{_number}%}
+					set {agiri.wordWolf::%{_id}%::%{agiri.wordWolf::%{_id}%::playerIndex::%{_number}%}%::voted::%{_uid}%} to discord nickname of event-member
+					retrieve message with id {agiri.wordWolf::%discord id of event-channel%::storedEmbed} in event-channel
+					set {_playerList} to ""
+					set {_index} to 1
+					loop {agiri.wordWolf::%discord id of event-channel%::players::*}:
+						set {agiri.wordWolf::%discord id of event-channel%::playerIndex::%{_index}%} to loop-index
+						if size of {agiri.wordWolf::%discord id of event-channel%::%loop-index%::voted::*} is more than 0:
+							set {_voteList} to "%{agiri.wordWolf::%discord id of event-channel%::%loop-index%::voted::*}%"
+							replace every " and" with "," in {_voteList}
+							set {_playerList} to "%{_playerList}%**%{_index}%**. <@%loop-index%>%newline%←(%agiri_getIDText(""wordwolf-embed-voted"", discord id of event-guild)%) %{_voteList}%%newline%%newline%"
+						else:
+							set {_playerList} to "%{_playerList}%**%{_index}%**. <@%loop-index%>%newline%%newline%"
+						add 1 to {_index}
+					create embed:
+						set the author info of the embed to author named "%agiri_getIDText(""wordwolf-embed-title"", discord id of event-guild)% (//wordwolf)" with no url
+						set the description of embed to "%{_playerList}%"
+						set the colour of the embed to {@BotColor}
+					edit last retrieved message to say last created embed
+					
+every tick:
+	loop {agiri.wordWolf::*}:
+		set {_id} to loop-index
+		set {_guild} to guild with id {agiri.wordWolf::%{_id}%::guildID}
+		set {_channel} to channel with id {_id} in {_guild}
+		if {agiri.wordWolf::%{_id}%::gameStatus} is "waiting":
+			if difference between {agiri.wordWolf::%{_id}%::timerSince} and now is more than 1 minute:
+				set {agiri.wordWolf::%{_id}%::timerSince} to now
+				remove 1 from {agiri.wordWolf::%{_id}%::timerLeft}
+				if {agiri.wordWolf::%{_id}%::timerLeft} is 2:
+					send ":alarm_clock: %agiri_getIDText(""wordwolf-waiting-players-2minutes-left"", {_guild})%" to channel with id loop-index with "{@BotName}"
+				if {agiri.wordWolf::%{_id}%::timerLeft} is 1:
+					send ":alarm_clock: %agiri_getIDText(""wordwolf-waiting-players-1minute-left"", {_guild})%" to channel with id loop-index with "{@BotName}"
+				else:
+					if size of {agiri.wordWolf::%{_id}%::players::*} is more than 1:
+						set {agiri.wordWolf::%{_id}%::gameStatus} to "revealTheme"
+						set {agiri.wordWolf::%{_id}%::wolfID} to random object out of {agiri.wordWolf::%{_id}%::players::*}
+						create embed:
+							set the author info of the embed to author named "%agiri_getIDText(""wordwolf-embed-title"", {_guild})% (//wordwolf)" with no url
+							set {_temp} to agiri_getIDText("wordwolf-embed-currentgame", {_guild})
+							replace every "{players}" with "%size of {agiri.wordWolf::%{_id}%::players::*}%" in {_temp}
+							set the description of embed to {_temp}
+							add field named ":notepad_spiral: %agiri_getIDText(""wordwolf-embed-showing-theme"", {_guild})%" with value agiri_getIDText("wordwolf-embed-showing-theme-description", {_guild}) to embed
+							set the colour of the embed to {@BotColor}
+						send last created embed to channel with id loop-index with "{@BotName}"
+						loop {agiri.wordWolf::%loop-index%::players::*}:
+							if {agiri.wordWolf::%loop-index-1%::wolfID} is loop-value-2:
+								set {_temp} to agiri_getIDText("wordwolf-theme-dm-wolf", {_guild})
+								replace every "{wolfTheme}" with "%{agiri.wordWolf::%loop-index-1%::wolfTheme}%" in {_temp}
+								replace every "{channelId}" with "%loop-index-1%" in {_temp}
+								send {_temp} to user with id loop-value-2 with "{@BotName}"
+							else:
+								set {_temp} to agiri_getIDText("wordwolf-theme-dm-innocent", {_guild})
+								replace every "{innocentTheme}" with "%{agiri.wordWolf::%loop-index-1%::innocentTheme}%" in {_temp}
+								replace every "{channelId}" with "%loop-index-1%" in {_temp}
+								send {_temp} to user with id loop-value-2 with "{@BotName}"
+					else:
+						send ":no_entry_sign: %agiri_getIDText(""wordwolf-not-enough-players"", {_guild})%" to channel with id loop-index with "{@BotName}"
+						delete {agiri.wordWolf::%loop-index%::playerIndex::*}
+						loop {agiri.wordWolf::%loop-index%::players::*}:
+							delete {agiri.wordWolf::%loop-index-1%::%loop-index-2%::voted::*}
+						delete {agiri.wordWolf::%loop-index%::votedPlayers::*}
+						delete {agiri.wordWolf::%loop-index%::players::*}
+						delete {agiri.wordWolf::%loop-index%::*}
+						delete {agiri.wordWolf::%loop-index%}
+		else if {agiri.wordWolf::%{_id}%::gameStatus} is "revealTheme":
+			if difference between {agiri.wordWolf::%{_id}%::timerSince} and now is more than 15 seconds:
+				set {agiri.wordWolf::%{_id}%::timerSince} to now
+				set {agiri.wordWolf::%{_id}%::timerLeft} to {agiri.wordWolf::%{_id}%::discussTime}
+				set {agiri.wordWolf::%{_id}%::gameStatus} to "discussion"
+				create embed:
+					set the author info of the embed to author named "%agiri_getIDText(""wordwolf-embed-title"", {_guild})% (//wordwolf)" with no url
+					set {_temp} to agiri_getIDText("wordwolf-embed-currentgame", {_guild})
+					replace every "{players}" with "%size of {agiri.wordWolf::%{_id}%::players::*}%" in {_temp}
+					set the description of embed to {_temp}
+					replace every "{players}" with "%size of {agiri.wordWolf::%{_id}%::players::*}%" in {_temp}
+					set {_temp1} to agiri_getIDText("wordwolf-embed-discussion", {_guild})
+					replace every "{discussionTime}" with "%{agiri.wordWolf::%{_id}%::discussTime}%" in {_temp1}
+					set {_temp2} to agiri_getIDText("wordwolf-embed-discussion-description", {_guild})
+					replace every "{discussionTime}" with "%{agiri.wordWolf::%{_id}%::discussTime}%" in {_temp2}
+					add field named ":thinking: %{_temp1}%" with value {_temp2} to embed
+					set the colour of the embed to {@BotColor}
+				send last created embed to channel with id loop-index with "{@BotName}"
+				set {_temp} to agiri_getIDText("wordwolf-discussion-minutes-left", {_guild})
+				replace every "{timeLeft}" with "%{agiri.wordWolf::%loop-index%::timerLeft}%" in {_temp}
+				send ":alarm_clock: %{_temp}%" to channel with id loop-index with "{@BotName}"
+		else if {agiri.wordWolf::%{_id}%::gameStatus} is "discussion":
+			if difference between {agiri.wordWolf::%{_id}%::timerSince} and now is more than 1 minute:
+				set {agiri.wordWolf::%{_id}%::timerSince} to now
+				remove 1 from {agiri.wordWolf::%{_id}%::timerLeft}
+				if {agiri.wordWolf::%{_id}%::timerLeft} is more than 0:
+					set {_g2} to guild with id {agiri.wordWolf::%{_id}%::guildID} 
+					set {_temp} to agiri_getIDText("wordwolf-discussion-minutes-left", {_g2})
+					replace every "{timeLeft}" with "%{agiri.wordWolf::%loop-index%::timerLeft}%" in {_temp}
+					send ":alarm_clock: %{_temp}%" to channel with id loop-index with "{@BotName}"
+				else:
+					set {agiri.wordWolf::%{_id}%::gameStatus} to "votePlayer"
+					send ":loudspeaker: %agiri_getIDText(""wordwolf-guess"", {_guild})%" to channel with id loop-index with "{@BotName}"
+					set {_playerList} to ""
+					set {_index} to 1
+					loop {agiri.wordWolf::%loop-index%::players::*}:
+						set {agiri.wordWolf::%loop-index-1%::playerIndex::%{_index}%} to loop-index-2
+						if size of {agiri.wordWolf::%loop-index-1%::%loop-index-2%::voted::*} is more than 0:
+							set {_voteList} to "%{agiri.wordWolf::%loop-index-1%::%loop-index-2%::voted::*}%"
+							replace every " and" with "," in {_voteList}
+							set {_playerList} to "%{_playerList}%**%{_index}%**. <@%loop-index-2%>%newline%←(%agiri_getIDText(""wordwolf-embed-voted"", {_guild})%) %{_voteList}%%newline%%newline%"
+						else:
+							set {_playerList} to "%{_playerList}%**%{_index}%**. <@%loop-index-2%>%newline%%newline%"
+						add 1 to {_index}
+					create embed:
+						set the author info of the embed to author named "%agiri_getIDText(""wordwolf-embed-title"", {_guild})% (//wordwolf)" with no url
+						set the description of embed to "%{_playerList}%"
+						set the colour of the embed to {@BotColor}
+					send last created embed to channel with id loop-index with "{@BotName}" and store it in {_stored}
+					set {agiri.wordWolf::%loop-index%::storedEmbed} to discord id of random message out of {_stored}
+		else if {agiri.wordWolf::%{_id}%::gameStatus} is "votePlayer":
+			if difference between {agiri.wordWolf::%{_id}%::timerSince} and now is more than 30 seconds:
+				set {_endGame} to true
+			if {_endGame} is true:
+				set {agiri.wordWolf::%loop-index%::gameStatus} to "endGame"
+				set {agiri.wordWolf::%loop-index%::timerSince} to now
+				set {_topVote} to 0
+				loop {agiri.wordWolf::%loop-index%::players::*}:
+					set {_votes.%loop-index-2%} to size of {agiri.wordWolf::%loop-index-1%::%loop-index-2%::voted::*}
+					if {_votes.%loop-index-2%} is more than {_topVote}:
+						set {_topVote} to {_votes.%loop-index-2%}
+						set {_topUser} to loop-index-2
+				if {_topVote} is 0:
+					send ":arrow_right: %agiri_getIDText(""wordwolf-embed-result-no-one-voted"", {_guild})%" to channel with id loop-index with "{@BotName}"
+					set {_win} to agiri_getIDText("wordwolf-wolf", {_guild})
+				else:
+					if {_topUser} is {agiri.wordWolf::%loop-index%::wolfID}:
+						send ":arrow_right: %agiri_getIDText(""wordwolf-embed-result-vote-correct"", {_guild})%" to channel with id loop-index with "{@BotName}"
+						set {_win} to agiri_getIDText("wordwolf-innocent", {_guild})
+					else:
+						send ":arrow_right: %agiri_getIDText(""wordwolf-embed-result-vote-incorrect"", {_guild})%" to channel with id loop-index with "{@BotName}"
+						set {_win} to agiri_getIDText("wordwolf-wolf", {_guild})
+				create embed:
+					set the author info of the embed to author named "%agiri_getIDText(""wordwolf-embed-title"", {_guild})% (//wordwolf)" with no url
+					set {_temp} to agiri_getIDText("wordwolf-embed-currentgame", {_guild})
+					replace every "{players}" with "%size of {agiri.wordWolf::%{_id}%::players::*}%" in {_temp}
+					set the description of embed to {_temp}
+					set {_temp} to agiri_getIDText("wordwolf-embed-game-info-description", {_guild})
+					replace every "{winner}" with "%{_win}%" in {_temp}
+					replace every "{wolfID}" with "%{agiri.wordWolf::%loop-index%::wolfID}%" in {_temp}
+					replace every "{innocentTheme}" with "%{agiri.wordWolf::%loop-index%::innocentTheme}%" in {_temp}
+					replace every "{wolfTheme}" with "%{agiri.wordWolf::%loop-index%::wolfTheme}%" in {_temp}
+					add field named "<:check:587564808665169922> %agiri_getIDText(""wordwolf-embed-game-info"", {_guild})%" with value {_temp} to embed
+					set the colour of the embed to {@BotColor}
+				send last created embed to channel with id loop-index with "{@BotName}"
+				delete {agiri.wordWolf::%loop-index%::playerIndex::*}
+				loop {agiri.wordWolf::%loop-index%::players::*}:
+					delete {agiri.wordWolf::%loop-index-1%::%loop-index-2%::voted::*}
+				delete {agiri.wordWolf::%loop-index%::votedPlayers::*}
+				delete {agiri.wordWolf::%loop-index%::players::*}
+				delete {agiri.wordWolf::%loop-index%::*}
+				delete {agiri.wordWolf::%loop-index%}
